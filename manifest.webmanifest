@@ -1,0 +1,13 @@
+{
+  "name": "畑の日次報告",
+  "short_name": "畑の日報",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f7f2",
+  "theme_color": "#245a36",
+  "icons": [
+    {"src": "icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any"}
+  ]
+}
