@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#245a36">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="畑の日報">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>畑の日次報告</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;color:#17251b;background:#f3f7f2;font-size:17px}
+    *{box-sizing:border-box}body{margin:0;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);max-width:720px;margin-inline:auto}
+    header{padding:18px 4px 8px}h1{font-size:1.45rem;margin:.2rem 0}.hint{color:#4c5d50;font-size:.9rem;line-height:1.55}
+    section,.entry{background:#fff;border:1px solid #cad8cb;border-radius:14px;padding:14px;margin:12px 0}
+    label{display:block;margin:10px 0 4px;font-size:.94rem;font-weight:600}input,select,textarea,button{font:inherit;min-height:48px;width:100%;padding:10px 12px;border:1px solid #91a395;border-radius:9px;background:#fff;color:inherit}
+    textarea{min-height:80px;resize:vertical}button{background:#245a36;border:0;color:white;font-weight:700;margin:6px 0;touch-action:manipulation}.secondary{background:#e8f0e8;color:#20482c;border:1px solid #9caf9f}.danger{background:#fff;color:#8b2929;border:1px solid #c99393}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.actions{position:sticky;bottom:0;padding:8px 0 calc(8px + env(safe-area-inset-bottom));background:#f3f7f2}.status{min-height:1.5em;color:#245a36}.small{font-size:.82rem}
+    @media(max-width:430px){.grid{grid-template-columns:1fr 1fr}section,.entry{padding:12px}}
+  </style>
+</head>
+<body>
+<header><h1>畑の日次報告</h1><p class="hint">通信なしでも入力できます。下書きはこのiPhoneのブラウザー内に保存されます。写真や位置情報は送信しません。</p></header>
+<section>
+  <label for="report-date">報告日</label><input id="report-date" type="date" required>
+  <label for="observed">今日は現地を観測しましたか？</label>
+  <select id="observed"><option value="yes">はい</option><option value="no">いいえ（作業・写真なし）</option></select>
+</section>
+<section id="work-section"><h2>作業記録</h2><div id="entries"></div><button id="add-entry" class="secondary" type="button">＋ 作業を追加</button>
+  <p class="hint small">作業者ごとの実時間を分で入力します。場所は任意です。AI提案の作業は承認済み提案IDを付けてください。</p>
+</section>
+<section><label for="notes">変化・困りごと</label><textarea id="notes"></textarea>
+  <label for="photos">写真の参照名（任意、1行に1つ）</label><textarea id="photos" placeholder="例：畑全景_2026-11-03.jpg"></textarea>
+  <p class="hint small">写真ファイル自体は選択・送信されません。元画像はiPhoneに保管してください。</p>
+</section>
+<template id="entry-template"><fieldset class="entry"><legend>作業</legend>
+  <label>作業者<select class="worker"><option>A</option><option>B</option></select></label>
+  <label>作業内容<input class="task" type="text" autocomplete="off"></label>
+  <label>場所（任意）<select class="area"><option value="">選択しない</option><option>全体</option><option>区画1</option><option>区画2</option><option>通路</option><option>井戸</option><option>出入口</option></select></label>
+  <div class="grid"><div><label>時間（分）</label><input class="minutes" type="number" min="1" max="1440" step="1" inputmode="numeric"></div>
+  <div><label>区分</label><select class="category"><option value="existing">既存作業</option><option value="additional">追加作業</option></select></div></div>
+  <label class="proposal-wrap" hidden>承認済み提案ID（任意）<input class="proposal-id" type="text" placeholder="YYYY-MM-DD-NN" autocapitalize="off"></label>
+  <button class="remove-entry danger" type="button">この作業を削除</button>
+</fieldset></template>
+<div class="actions"><button id="download" type="button">日次報告JSONを保存</button><p id="message" class="status" role="status" aria-live="polite"></p></div>
+<script>
+(() => {
+  const $=id=>document.getElementById(id), entries=$('entries'), template=$('entry-template');
+  const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+  $('report-date').value=today();
+  const key=()=>`farm-daily-report-${$('report-date').value}`;
+  function setVisibility(){const yes=$('observed').value==='yes';$('work-section').hidden=!yes;$('photos').disabled=!yes}
+  function values(){return {date:$('report-date').value,observed:$('observed').value,notes:$('notes').value,photos:$('photos').value,entries:[...entries.querySelectorAll('.entry')].map(f=>({worker:f.querySelector('.worker').value,task:f.querySelector('.task').value,area:f.querySelector('.area').value,minutes:f.querySelector('.minutes').value,category:f.querySelector('.category').value,proposal_id:f.querySelector('.proposal-id').value}))}}
+  function saveDraft(){try{localStorage.setItem(key(),JSON.stringify(values()));$('message').textContent='下書きをこのiPhoneに保存しました。'}catch(_){$('message').textContent='端末内保存が使えません。入力後すぐにJSONを保存してください。'}}
+  function addEntry(saved={}){const node=template.content.cloneNode(true),f=node.querySelector('.entry'),cat=f.querySelector('.category'),wrap=f.querySelector('.proposal-wrap');
+    f.querySelector('.worker').value=saved.worker||'A';f.querySelector('.task').value=saved.task||'';f.querySelector('.area').value=saved.area||'';f.querySelector('.minutes').value=saved.minutes||'';cat.value=saved.category||'existing';f.querySelector('.proposal-id').value=saved.proposal_id||'';wrap.hidden=cat.value!=='additional';
+    cat.addEventListener('change',()=>{wrap.hidden=cat.value!=='additional';if(wrap.hidden)f.querySelector('.proposal-id').value='';saveDraft()});
+    f.querySelector('.remove-entry').addEventListener('click',()=>{f.remove();saveDraft()});
+    for(const c of f.querySelectorAll('input,select'))c.addEventListener('input',saveDraft);
+    entries.appendChild(node);
+  }
+  function restore(){entries.replaceChildren();$('observed').value='yes';$('notes').value='';$('photos').value='';addEntry();try{const d=JSON.parse(localStorage.getItem(key())||'null');if(d){$('observed').value=d.observed||'yes';$('notes').value=d.notes||'';$('photos').value=d.photos||'';entries.replaceChildren();(d.entries?.length?d.entries:[{}]).forEach(addEntry);$('message').textContent='保存済みの下書きを復元しました。'}else $('message').textContent=''}catch(_){$('message').textContent='下書きを復元できませんでした。'}setVisibility()}
+  restore();
+  $('add-entry').addEventListener('click',()=>{addEntry();saveDraft()});
+  $('observed').addEventListener('change',()=>{setVisibility();saveDraft()});
+  $('report-date').addEventListener('change',restore);$('notes').addEventListener('input',saveDraft);$('photos').addEventListener('input',saveDraft);
+  $('download').addEventListener('click',()=>{
+    const date=$('report-date').value,observed=$('observed').value==='yes';if(!date){$('message').textContent='報告日を入力してください。';return}
+    const rows=observed?[...entries.querySelectorAll('.entry')].flatMap(f=>{const task=f.querySelector('.task').value.trim(),minutes=f.querySelector('.minutes').value;if(!task&&!minutes)return[];if(!task||!minutes)throw Error('作業内容と分数を入力してください。');const amount=Number(minutes);if(!Number.isInteger(amount)||amount<1||amount>1440)throw Error('分数は1〜1440の整数で入力してください。');const category=f.querySelector('.category').value,id=f.querySelector('.proposal-id').value.trim();if(id&&!/^\d{4}-\d{2}-\d{2}-\d{2}$/.test(id))throw Error('提案IDはYYYY-MM-DD-NN形式で入力してください。');if(id&&category!=='additional')throw Error('提案IDを付ける作業は追加作業にしてください。');const area=f.querySelector('.area').value;return[{worker:f.querySelector('.worker').value,task,minutes:amount,category,...(area?{area}:{}),...(id?{proposal_id:id}:{})}]}):[];
+    const totals={};for(const row of rows)totals[row.worker]=(totals[row.worker]||0)+row.minutes;if(Object.values(totals).some(n=>n>1440)){ $('message').textContent='作業者ごとの合計は1日1440分以内にしてください。';return }
+    const report={date,observed,entries:rows,notes:$('notes').value.trim(),photos:observed?$('photos').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean):[]};
+    const blob=new Blob([JSON.stringify(report,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${date}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);saveDraft();$('message').textContent='JSONを作成しました。ファイルアプリの「ダウンロード」に保存してください。';
+  });
+})();
+</script>
+<script>if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});</script>
+</body></html>
